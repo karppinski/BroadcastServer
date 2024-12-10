@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
@@ -7,6 +8,7 @@ namespace BroadcastServer
 {
     class Program
     {
+        private static ConcurrentDictionary<Guid, WebSocket> _connections = new();
         static async Task Main()
         {
             var httpListener = new HttpListener();
@@ -19,7 +21,7 @@ namespace BroadcastServer
                 var  context = await httpListener.GetContextAsync();
                 if(context.Request.IsWebSocketRequest)
                 {
-                    await ProcessRequest(context);
+                    _ = Task.Run(() => ProcessRequest(context));
                 }
                 else
                 {
@@ -33,7 +35,10 @@ namespace BroadcastServer
         {
             WebSocketContext webSocketContext = await context.AcceptWebSocketAsync(null);
             var webSocket = webSocketContext.WebSocket;
-            Console.WriteLine("Client connected");
+            var clientId = Guid.NewGuid();
+            Console.WriteLine($"Client id {clientId} connected");
+
+            _connections.TryAdd(clientId, webSocket);
 
             byte[] buffer = new byte[1024];
 
@@ -44,19 +49,41 @@ namespace BroadcastServer
                 if(result.MessageType == WebSocketMessageType.Text)
                 {
                     var receivedMessage = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    Console.WriteLine($"Reviced {receivedMessage}");
+                    Console.WriteLine($"Reviced {receivedMessage} from {clientId}");
 
-                    string responseMessage = $"Server received message {receivedMessage}";
-                    var responseBuffer = Encoding.UTF8.GetBytes(responseMessage);
-                    await webSocket.SendAsync(responseBuffer, WebSocketMessageType.Text, true, CancellationToken.None);
+                    await BroadcastMessageAsync(clientId, receivedMessage);
                 }
                 else if(result.MessageType == WebSocketMessageType.Close)
                 {
                     Console.WriteLine("Client disconected.");
+                    _connections.TryRemove(clientId, out _);
                     await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
                     break;
                 }
             }
+        }
+
+        static async Task BroadcastMessageAsync(Guid senderId, string message)
+        {
+            string responseMessage = $"Client {senderId}: {message}";
+            var responseBuffer= Encoding.UTF8.GetBytes(responseMessage);
+
+            foreach (var (id, webSocket) in _connections)
+            {
+                if(webSocket.State == WebSocketState.Open)
+                {
+                    try
+                    {
+                        await webSocket.SendAsync(new ArraySegment<byte>(responseBuffer), WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                    catch
+                    {
+                        Console.WriteLine($"There is a problem with sending message to {id}");
+                    }
+                }
+            }
+            
+
         }
     }
 }
