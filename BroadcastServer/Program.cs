@@ -35,7 +35,7 @@ namespace BroadcastServer
             var webSocket = webSocketContext.WebSocket;
             Console.WriteLine("Client connected");
 
-            var buffer = new byte[1024];
+            byte[] buffer = new byte[1024];
 
             while (webSocket.State == WebSocketState.Open)
             {
