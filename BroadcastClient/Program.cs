@@ -1,4 +1,6 @@
 ﻿using System.Collections.Concurrent;
+using System.ComponentModel.Design;
+using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 
@@ -6,22 +8,57 @@ namespace BroadcastClient
 {
     class Program
     {
-        static async Task Main()
+        static async Task Main(string[] args)
         {
             int maxRetry = 6;
             int retryCount = 1;
 
 
+            int defaultPort = 7000;
+
+
+            if (args.Length != 2 || args[0] != "--port" || args[1].Length != 4)
+            {
+                Console.WriteLine("Connecting to the default port.");
+            }
+            else if (int.TryParse(args[1], out int port))
+            {
+                if (port >= 7000 || port <= 7099)
+                {
+                    defaultPort = port;
+                }
+                else
+                {
+                    Console.WriteLine("This application uses ports between 7000 to 7099");
+                    Console.WriteLine("You will be connected to default port.");
+                }
+            }
+
+            int finalPort = await CheckIfServerRuningOnPort(defaultPort);
+            if( finalPort == 7100)
+            {
+                Console.WriteLine("No running server found, try again later");
+                Environment.Exit(0);
+
+            }
+            else if(finalPort == 7101)
+            {
+                Console.WriteLine("Shutting application down.");
+                Environment.Exit(0);
+            }
 
             while (retryCount < maxRetry)
             {
+
                 using var clientWebSocket = new ClientWebSocket();
+
+
                 using var clientCancellationSource = new CancellationTokenSource();
                 var clientCancellationToken = clientCancellationSource.Token;
                 try
                 {
-                  
-                    await clientWebSocket.ConnectAsync(new Uri("ws://localhost:7000/"), clientCancellationToken);
+                   // tutaj zrobić porty dla klienta !!
+                    await clientWebSocket.ConnectAsync(new Uri($"ws://localhost:/{finalPort}"), clientCancellationToken);
                     Console.WriteLine("Connected to the server!");
                     Console.WriteLine();
                     Console.WriteLine("Write a message or write 'exit' to close:");
@@ -130,6 +167,29 @@ namespace BroadcastClient
                     break;
                 }
             }
+        }
+
+        static async Task<int> CheckIfServerRuningOnPort(int port)
+        {
+            while (port != 7100)
+            {
+                var clientWebSocket = new ClientWebSocket();
+                try
+                {
+                    Console.WriteLine("Trying to connect on port " + port);
+                    await clientWebSocket.ConnectAsync(new Uri($"ws://localhost:{port}/"), CancellationToken.None);
+                    break;
+                }
+                catch (WebSocketException)
+                {
+                    Console.WriteLine($"Server with port {port} not found, do you want to try next port? [y/n]");
+                    var key = Console.ReadKey();
+                    if (key.KeyChar == 'y' || key.KeyChar == 'Y')
+                    { port++; }
+                    else { port = 7101; }
+                }
+            }
+            return port;
         }
 
     }

@@ -20,7 +20,15 @@ namespace BroadcastServer
             }
             else if (int.TryParse(args[1], out int port))
             {
-                defaultPort = port ;
+                if (port >= 7000 || port <= 7099)
+                {
+                    defaultPort = port;
+                }
+                else
+                {
+                    Console.WriteLine("This application uses ports between 7000 to 7099");
+                    Console.WriteLine("You will be connected to default port.");
+                }
             }
 
             using var httpListener = new HttpListener();
