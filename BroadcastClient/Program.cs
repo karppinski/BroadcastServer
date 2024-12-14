@@ -14,6 +14,7 @@ namespace BroadcastClient
             int retryCount = 1;
 
 
+
             int defaultPort = 7000;
 
 
@@ -46,19 +47,17 @@ namespace BroadcastClient
                 Console.WriteLine("Shutting application down.");
                 Environment.Exit(0);
             }
-
             while (retryCount < maxRetry)
             {
 
-                using var clientWebSocket = new ClientWebSocket();
-
-
                 using var clientCancellationSource = new CancellationTokenSource();
                 var clientCancellationToken = clientCancellationSource.Token;
+
+                using var clientWebSocket = new ClientWebSocket();
+
                 try
                 {
-                   // tutaj zrobić porty dla klienta !!
-                    await clientWebSocket.ConnectAsync(new Uri($"ws://localhost:/{finalPort}"), clientCancellationToken);
+                    await clientWebSocket.ConnectAsync(new Uri($"ws://localhost:{finalPort}"), clientCancellationToken); 
                     Console.WriteLine("Connected to the server!");
                     Console.WriteLine();
                     Console.WriteLine("Write a message or write 'exit' to close:");
@@ -80,7 +79,8 @@ namespace BroadcastClient
                                 Console.WriteLine("Closing connection");
                                 await clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client exited", clientCancellationToken); // chyba tutaj pownien byc cancellation.none
                                 clientCancellationSource.Cancel();
-                                break;
+                                //Environment.Exit(0);
+
                             }
 
 
@@ -88,24 +88,30 @@ namespace BroadcastClient
                             await clientWebSocket.SendAsync(new ArraySegment<byte>(messageToSend), WebSocketMessageType.Text, true, clientCancellationToken);
                         }
                     }
-                    await receivingTask;
-                    Console.WriteLine("receiving oczekany");
-                    await cancellationRefresherTask;
-                    Console.WriteLine("cancellation refresher oczekany");
                 }
 
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex) when (!clientCancellationToken.IsCancellationRequested)
                 {
+                    Console.WriteLine(ex);
                     Console.WriteLine("Your exit has been proceeded.");
-                    break;
+                    continue;
+
                 }
                 catch (WebSocketException)
                 {
-                    clientCancellationSource.Cancel();
-                    Console.WriteLine("Server is down or stopped connection");
-                    Console.WriteLine("Retry attempt no " + retryCount);
-                    retryCount++;
-                    await Task.Delay(3000);
+                    if (!clientCancellationToken.IsCancellationRequested)
+                    {
+                        clientCancellationSource.Cancel();
+                        Console.WriteLine("Server is down or stopped connection");
+                        Console.WriteLine("Retry attempt no " + retryCount);
+                        retryCount++;
+                        await Task.Delay(3000);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Cancelling all tasks");
+                        break;
+                    }
                     
 
                     if (retryCount == maxRetry)
@@ -135,6 +141,7 @@ namespace BroadcastClient
                     else if (result.MessageType == WebSocketMessageType.Close)
                     {
                         Console.WriteLine("Server closed your connection");
+                        break;
                     }
                 }
                 catch (OperationCanceledException)
@@ -156,7 +163,7 @@ namespace BroadcastClient
                     await clientWebSocket.SendAsync(new ArraySegment<byte>(refreshToken), WebSocketMessageType.Text, true, cancellationToken);
                     await Task.Delay(4000, cancellationToken);
                 }
-                catch (TaskCanceledException)
+                catch (TaskCanceledException) 
                 {
                     Console.WriteLine("Senc refresher task has been paused");
                     break;
@@ -171,13 +178,14 @@ namespace BroadcastClient
 
         static async Task<int> CheckIfServerRuningOnPort(int port)
         {
-            while (port != 7100)
+            while (port < 7099)
             {
-                var clientWebSocket = new ClientWebSocket();
                 try
                 {
+                    using var clientWebSocket = new ClientWebSocket();
                     Console.WriteLine("Trying to connect on port " + port);
                     await clientWebSocket.ConnectAsync(new Uri($"ws://localhost:{port}/"), CancellationToken.None);
+                    await clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
                     break;
                 }
                 catch (WebSocketException)
