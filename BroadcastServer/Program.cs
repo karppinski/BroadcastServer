@@ -33,7 +33,7 @@ namespace BroadcastServer
 
             using var httpListener = new HttpListener();
 
-            int workingPort = CheckPortAvaliabilityAndStartServer(defaultPort);
+            int workingPort = CheckPortAvaliability(defaultPort);
             httpListener.Prefixes.Add($"http://localhost:{workingPort}/");
             httpListener.Start();
             Console.WriteLine("Server set and waiting for connections!");
@@ -148,7 +148,7 @@ namespace BroadcastServer
                     Console.WriteLine($"Client {clientId} has quit.");
             }
         }
-        static int CheckPortAvaliabilityAndStartServer(int port)
+        static int CheckPortAvaliability(int port)
         {
             while (true)
             {
